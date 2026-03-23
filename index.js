@@ -9,6 +9,7 @@ const fs = require("fs");
 
 const TOKEN = process.env.TOKEN;
 
+// ===== CLIENT =====
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -18,7 +19,7 @@ const client = new Client({
   ]
 });
 
-// ===== SERVER WEB (PER RENDER) =====
+// ===== WEB SERVER (RENDER) =====
 const app = express();
 app.get("/", (req, res) => res.send("Bot attivo"));
 app.listen(3000, () => console.log("Web server attivo"));
@@ -27,7 +28,6 @@ app.listen(3000, () => console.log("Web server attivo"));
 let data = fs.existsSync("./data.json")
   ? JSON.parse(fs.readFileSync("./data.json"))
   : {
-      users: {},
       bonusRuoli: {
         cittadino: 0,
         diacono: 5,
@@ -42,34 +42,15 @@ function saveData() {
   fs.writeFileSync("./data.json", JSON.stringify(data, null, 2));
 }
 
-// ===== STIPENDI BASE =====
-const stipendiBase = {
-  cittadino: 5,
-  diacono: 10,
-  sacerdote: 20,
-  vescovo: 40,
-  cardinale: 80,
-  papa: 120
-};
-
-// ===== RUOLO DISCORD =====
-function getRuolo(member) {
-  const order = ["papa","cardinale","vescovo","sacerdote","diacono","cittadino"];
-  for (let r of order) {
-    if (member.roles.cache.some(role => role.name === r)) return r;
-  }
-  return "cittadino";
-}
-
-// ===== PERMESSI ADMIN =====
+// ===== PERMESSI =====
 function isAdmin(member) {
   return member.roles.cache.some(r =>
     r.name === "papa" || r.name === "segretario"
   );
 }
 
-// ===== PANEL ADMIN =====
-async function sendAdminPanel(channel) {
+// ===== PANEL =====
+async function sendPanel(channel) {
   const embed = new EmbedBuilder()
     .setTitle("⚙️ Pannello Amministrativo")
     .setDescription("Gestione Curia")
@@ -90,47 +71,55 @@ async function sendAdminPanel(channel) {
   await channel.send({ embeds: [embed], components: [row] });
 }
 
-// ===== COMANDI =====
+// ===== COMANDO ADMIN =====
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
 
   if (message.content === "!admin") {
-    if (!isAdmin(message.member))
+    if (!isAdmin(message.member)) {
       return message.reply("Accesso negato");
+    }
 
-    return sendAdminPanel(message.channel);
+    return sendPanel(message.channel);
   }
 });
 
-// ===== INTERAZIONI BOTTONI =====
+// ===== INTERAZIONI =====
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isButton()) return;
 
   const member = interaction.member;
 
-  if (!isAdmin(member))
+  if (!isAdmin(member)) {
     return interaction.reply({ content: "Accesso negato", ephemeral: true });
+  }
 
-  // ===== VISTA BONUS =====
+  // ===== BONUS VIEW =====
   if (interaction.customId === "bonus_view") {
     const embed = new EmbedBuilder()
       .setTitle("✨ Bonus Ruoli")
       .setDescription(
         Object.entries(data.bonusRuoli)
-          .map(([ruolo, bonus]) => `${ruolo}: +${bonus} ducati`)
+          .map(([ruolo, bonus]) => `**${ruolo}** → +${bonus} ducati`)
           .join("\n")
-      );
+      )
+      .setColor(0x00aaff);
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setCustomId("bonus_plus")
+        .setCustomId("bonus_add")
         .setLabel("Aumenta Bonus")
         .setStyle(ButtonStyle.Success),
 
       new ButtonBuilder()
-        .setCustomId("bonus_minus")
-        .setLabel("Diminuisci Bonus")
-        .setStyle(ButtonStyle.Danger)
+        .setCustomId("bonus_remove")
+        .setLabel("Riduci Bonus")
+        .setStyle(ButtonStyle.Danger),
+
+      new ButtonBuilder()
+        .setCustomId("back")
+        .setLabel("Indietro")
+        .setStyle(ButtonStyle.Secondary)
     );
 
     return interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
@@ -144,48 +133,41 @@ client.on(Events.InteractionCreate, async (interaction) => {
     });
   }
 
-  // ===== MODIFICA BONUS =====
-  if (interaction.customId === "bonus_plus" || interaction.customId === "bonus_minus") {
-    const factor = interaction.customId === "bonus_plus" ? 5 : -5;
-
-    const ruoli = Object.keys(data.bonusRuoli);
-
-    let msg = "Ruoli aggiornati:\n";
-
-    ruoli.forEach(r => {
-      data.bonusRuoli[r] += factor;
-      if (data.bonusRuoli[r] < 0) data.bonusRuoli[r] = 0;
-      msg += `${r}: ${data.bonusRuoli[r]}\n`;
+  // ===== BONUS MODIFICA =====
+  if (interaction.customId === "bonus_add") {
+    Object.keys(data.bonusRuoli).forEach(r => {
+      data.bonusRuoli[r] += 5;
     });
 
     saveData();
 
-    return interaction.reply({ content: msg, ephemeral: true });
+    return interaction.reply({
+      content: "Bonus aumentati ✔",
+      ephemeral: true
+    });
+  }
+
+  if (interaction.customId === "bonus_remove") {
+    Object.keys(data.bonusRuoli).forEach(r => {
+      data.bonusRuoli[r] = Math.max(0, data.bonusRuoli[r] - 5);
+    });
+
+    saveData();
+
+    return interaction.reply({
+      content: "Bonus ridotti ✔",
+      ephemeral: true
+    });
+  }
+
+  // ===== BACK =====
+  if (interaction.customId === "back") {
+    return interaction.reply({
+      content: "Chiudi e riapri !admin",
+      ephemeral: true
+    });
   }
 });
-
-// ===== STIPENDIO GIORNALIERO =====
-setInterval(async () => {
-  const guild = client.guilds.cache.first();
-  if (!guild) return;
-
-  await guild.members.fetch();
-
-  guild.members.cache.forEach(member => {
-    if (member.user.bot) return;
-
-    const ruolo = getRuolo(member);
-
-    const base = stipendiBase[ruolo] || 5;
-    const bonus = data.bonusRuoli[ruolo] || 0;
-
-    const totale = base + bonus;
-
-    console.log(`${member.user.username} riceve ${totale} ducati`);
-  });
-
-  saveData();
-}, 24 * 60 * 60 * 1000);
 
 // ===== READY =====
 client.once("clientReady", () => {
