@@ -2,7 +2,6 @@ const { Client, GatewayIntentBits, Partials, ActionRowBuilder, ButtonBuilder, Bu
       econ.updateMoney(id, -50);
       interaction.user.send('Indulgenza acquistata');
       return interaction.reply({ content: 'Fatto', ephemeral: true });
-    }
 
     if (interaction.commandName === 'panel') {
       const row = new ActionRowBuilder().addComponents(
