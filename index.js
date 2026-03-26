@@ -12,7 +12,6 @@ const { Client, GatewayIntentBits, Partials, ActionRowBuilder, ButtonBuilder, Bu
 
       return interaction.reply({ content: 'Apri menu', components: [row], ephemeral: true });
     }
-  }
 
   if (interaction.isButton()) {
     const id = interaction.user.id;
