@@ -12,7 +12,7 @@ const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 async function deploy() {
   try {
     await rest.put(
-      Routes.applicationCommands(process.env.CLIENT_ID),
+      Routes.applicationCommands(process.env.1485641164504694905),
       { body: commands }
     );
     console.log('Comandi registrati');
