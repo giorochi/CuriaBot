@@ -7,7 +7,7 @@ const commands = [
   new SlashCommandBuilder().setName('panel').setDescription('Menu principale')
 ];
 
-const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
+const rest = new REST({ version: '10' }).setToken(process.env.CLIENT_ID);
 
 async function deploy() {
   try {
