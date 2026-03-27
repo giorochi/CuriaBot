@@ -13,6 +13,16 @@ const econ = require('./economy');
 const cron = require('node-cron');
 const { SALARY_ROLES, TAX_RATE } = require('./roleConfig');
 
+// Solo per Render Web Service
+const http = require('http');
+
+const server = http.createServer((req, res) => {
+  res.end('Bot attivo');
+});
+
+const PORT = process.env.PORT || 10000;
+server.listen(PORT, () => console.log(`Server HTTP attivo su porta ${PORT}`));
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
