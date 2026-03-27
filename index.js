@@ -1,4 +1,58 @@
 const {
+  Client,
+  GatewayIntentBits,
+  Partials,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  Events
+} = require('discord.js');
+
+const db = require('./db');
+const econ = require('./economy');
+const cron = require('node-cron');
+const { SALARY_ROLES, TAX_RATE } = require('./roleConfig');
+
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.DirectMessages
+  ],
+  partials: [Partials.Channel]
+});
+
+// =========================
+// BOT ONLINE
+// =========================
+client.once(Events.ClientReady, () => {
+  console.log(`ONLINE ${client.user.tag}`);
+});
+
+// =========================
+// FUNZIONE STIPENDI + TASSE + DM
+// =========================
+async function processSalaries() {
+  for (const guild of client.guilds.cache.values()) {
+    const members = await guild.members.fetch();
+
+    members.forEach(async (member) => {
+      let totalSalary = 0;
+      member.roles.cache.forEach(role => {
+        if (SALARY_ROLES[role.name]) totalSalary += SALARY_ROLES[role.name];
+      });
+
+      if (totalSalary > 0) {
+        const tax = Math.floor(totalSalary * TAX_RATE);
+        const finalAmount = totalSalary - tax;
+        econ.addMoney(member.id, finalAmount);
+
+        try {
+          await member.send(`💰 Stipendio giornaliero ricevuto\nLordo: ${totalSalary}\nTasse: ${tax}\nNetto: ${finalAmount}`);
+        } catch {}
+      }
     });
   }
   console.log("Stipendi giornalieri completati");
@@ -75,4 +129,5 @@ client.on(Events.MessageCreate, async msg => {
   }
 });
 
+// LOGIN BOT
 client.login(process.env.TOKEN);
