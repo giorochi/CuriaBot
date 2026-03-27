@@ -1,3 +1,7 @@
+// ==========================================
+// DISCORD CHURCH RP BOT - INDEX.JS COMPLETO
+// ==========================================
+
 const {
   Client,
   GatewayIntentBits,
@@ -8,20 +12,11 @@ const {
   Events
 } = require('discord.js');
 
+const http = require('http'); // Porta finta per Render Web Service
 const db = require('./db');
 const econ = require('./economy');
 const cron = require('node-cron');
 const { SALARY_ROLES, TAX_RATE } = require('./roleConfig');
-
-// Solo per Render Web Service
-const http = require('http');
-
-const server = http.createServer((req, res) => {
-  res.end('Bot attivo');
-});
-
-const PORT = process.env.PORT || 10000;
-server.listen(PORT, () => console.log(`Server HTTP attivo su porta ${PORT}`));
 
 const client = new Client({
   intents: [
@@ -32,6 +27,14 @@ const client = new Client({
     GatewayIntentBits.DirectMessages
   ],
   partials: [Partials.Channel]
+});
+
+// =========================
+// PORTA FINTA RENDER
+// =========================
+const PORT = process.env.PORT || 10000;
+http.createServer((req, res) => res.end('Bot attivo')).listen(PORT, () => {
+  console.log(`Server HTTP finto attivo su porta ${PORT}`);
 });
 
 // =========================
@@ -77,6 +80,9 @@ cron.schedule('0 0 * * *', () => processSalaries());
 client.on(Events.InteractionCreate, async interaction => {
   if (!interaction.isButton()) return;
 
+  // Rispondi subito per evitare timeout
+  await interaction.deferReply({ ephemeral: true });
+
   const user = await econ.getUser(interaction.user.id, interaction.user.username);
 
   // PANNELLO GIOCATORE
@@ -85,21 +91,22 @@ client.on(Events.InteractionCreate, async interaction => {
       new ButtonBuilder().setCustomId('profilo').setLabel('Profilo').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId('soldi').setLabel('Denaro').setStyle(ButtonStyle.Success)
     );
-    return interaction.user.send({ content: '📜 Menu giocatore', components: [row] });
+    await interaction.user.send({ content: '📜 Menu giocatore', components: [row] });
+    return interaction.editReply('✅ Menu inviato in DM!');
   }
 
   if (interaction.customId === 'profilo') {
-    return interaction.user.send(`👤 Profilo\nNome: ${user.name}\nDenaro: ${user.money}`);
+    return interaction.editReply(`👤 Profilo\nNome: ${user.name}\nDenaro: ${user.money}`);
   }
 
   if (interaction.customId === 'soldi') {
-    return interaction.user.send(`💰 Hai ${user.money} monete`);
+    return interaction.editReply(`💰 Hai ${user.money} monete`);
   }
 
   // PANNELLO ADMIN AVANZATO
   if (interaction.customId === 'admin_panel') {
     if (!interaction.member.permissions.has('Administrator')) {
-      return interaction.reply({ content: 'Non puoi usare questo comando', ephemeral: true });
+      return interaction.editReply('❌ Non puoi usare questo comando');
     }
 
     const users = await new Promise(resolve => {
@@ -117,11 +124,11 @@ client.on(Events.InteractionCreate, async interaction => {
 
   // BOTTONI ADMIN AGGIUNGI/SOTTRAI SOLDI
   if (interaction.customId === 'admin_add') {
-    await interaction.user.send('Funzione aggiungi soldi da implementare con input');
+    await interaction.editReply('Funzione aggiungi soldi da implementare con input');
   }
 
   if (interaction.customId === 'admin_subtract') {
-    await interaction.user.send('Funzione sottrai soldi da implementare con input');
+    await interaction.editReply('Funzione sottrai soldi da implementare con input');
   }
 });
 
