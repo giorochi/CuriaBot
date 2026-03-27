@@ -16,7 +16,12 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.DirectMessages],
   partials: [Partials.Channel]
 });
+const http = require('http');
 
+http.createServer((req, res) => {
+  res.write('Bot attivo');
+  res.end();
+}).listen(process.env.PORT || 3000);
 client.once('ready', () => {
   console.log(`ONLINE ${client.user.tag}`);
 });
