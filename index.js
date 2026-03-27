@@ -1,48 +1,42 @@
 const {
     const members = await guild.members.fetch();
 
-    for (const member of members.values()) {
+    members.forEach(async (member) => {
       let totalSalary = 0;
-
       member.roles.cache.forEach(role => {
-        if (SALARY_ROLES[role.name]) {
-          totalSalary += SALARY_ROLES[role.name];
-        }
+        if (SALARY_ROLES[role.name]) totalSalary += SALARY_ROLES[role.name];
       });
 
       if (totalSalary > 0) {
         const tax = Math.floor(totalSalary * TAX_RATE);
         const finalAmount = totalSalary - tax;
-
         econ.addMoney(member.id, finalAmount);
 
         try {
-          await member.send(`💰 Stipendio ricevuto\nLordo: ${totalSalary}\nTasse: ${tax}\nNetto: ${finalAmount}`);
+          await member.send(`💰 Stipendio giornaliero ricevuto\nLordo: ${totalSalary}\nTasse: ${tax}\nNetto: ${finalAmount}`);
         } catch {}
       }
-    }
+    });
   }
-
   console.log("Stipendi giornalieri completati");
 }
 
-// ogni giorno a mezzanotte
 cron.schedule('0 0 * * *', processSalaries);
 
 // =========================
-// INTERFACCIA GIOCATORE
+// INTERFACCIA GIOCATORE + ADMIN
 // =========================
 client.on(Events.InteractionCreate, async interaction => {
   if (!interaction.isButton()) return;
 
   const user = await econ.getUser(interaction.user.id, interaction.user.username);
 
+  // GIOCATORE
   if (interaction.customId === 'open_panel') {
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('profilo').setLabel('Profilo').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId('soldi').setLabel('Denaro').setStyle(ButtonStyle.Success)
     );
-
     return interaction.user.send({ content: '📜 Menu giocatore', components: [row] });
   }
 
@@ -54,21 +48,35 @@ client.on(Events.InteractionCreate, async interaction => {
     return interaction.user.send(`💰 Hai ${user.money} monete`);
   }
 
+  // ADMIN AVANZATO
   if (interaction.customId === 'admin_panel') {
-    if (!interaction.member.permissions.has('Administrator')) return;
+    if (!interaction.member.permissions.has('Administrator')) return interaction.reply({ content: 'Non puoi usare questo comando', ephemeral: true });
 
     const users = await new Promise(resolve => {
       db.all("SELECT * FROM players", [], (err, rows) => resolve(rows));
     });
 
-    const text = users.map(u => `${u.name}: ${u.money}`).join("\n");
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('admin_add').setLabel('Aggiungi soldi').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('admin_subtract').setLabel('Rimuovi soldi').setStyle(ButtonStyle.Danger)
+    );
 
-    return interaction.user.send(`📊 Pannello Admin\n${text}`);
+    const text = users.map(u => `${u.name}: ${u.money}`).join('\n');
+    return interaction.user.send({ content: `📊 Pannello Admin\n${text}`, components: [row] });
+  }
+
+  // BOTTONI ADMIN AGGIUNGI/SOTTRAI SOLDI
+  if (interaction.customId === 'admin_add') {
+    await interaction.user.send('Funzione aggiungi soldi da implementare con input');
+  }
+
+  if (interaction.customId === 'admin_subtract') {
+    await interaction.user.send('Funzione sottrai soldi da implementare con input');
   }
 });
 
 // =========================
-// COMANDO PER APRIRE MENU
+// COMANDO !menu
 // =========================
 client.on(Events.MessageCreate, async msg => {
   if (msg.content === '!menu') {
