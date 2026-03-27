@@ -1,37 +1,21 @@
 const {
-    const members = await guild.members.fetch();
-
-    members.forEach(async (member) => {
-      let totalSalary = 0;
-      member.roles.cache.forEach(role => {
-        if (SALARY_ROLES[role.name]) totalSalary += SALARY_ROLES[role.name];
-      });
-
-      if (totalSalary > 0) {
-        const tax = Math.floor(totalSalary * TAX_RATE);
-        const finalAmount = totalSalary - tax;
-        econ.addMoney(member.id, finalAmount);
-
-        try {
-          await member.send(`💰 Stipendio giornaliero ricevuto\nLordo: ${totalSalary}\nTasse: ${tax}\nNetto: ${finalAmount}`);
-        } catch {}
-      }
     });
   }
   console.log("Stipendi giornalieri completati");
 }
 
-cron.schedule('0 0 * * *', processSalaries);
+// CRON: ogni giorno a mezzanotte
+cron.schedule('0 0 * * *', () => processSalaries());
 
 // =========================
-// INTERFACCIA GIOCATORE + ADMIN
+// INTERAZIONI BOTTONI GIOCATORE + ADMIN
 // =========================
 client.on(Events.InteractionCreate, async interaction => {
   if (!interaction.isButton()) return;
 
   const user = await econ.getUser(interaction.user.id, interaction.user.username);
 
-  // GIOCATORE
+  // PANNELLO GIOCATORE
   if (interaction.customId === 'open_panel') {
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('profilo').setLabel('Profilo').setStyle(ButtonStyle.Primary),
@@ -48,9 +32,11 @@ client.on(Events.InteractionCreate, async interaction => {
     return interaction.user.send(`💰 Hai ${user.money} monete`);
   }
 
-  // ADMIN AVANZATO
+  // PANNELLO ADMIN AVANZATO
   if (interaction.customId === 'admin_panel') {
-    if (!interaction.member.permissions.has('Administrator')) return interaction.reply({ content: 'Non puoi usare questo comando', ephemeral: true });
+    if (!interaction.member.permissions.has('Administrator')) {
+      return interaction.reply({ content: 'Non puoi usare questo comando', ephemeral: true });
+    }
 
     const users = await new Promise(resolve => {
       db.all("SELECT * FROM players", [], (err, rows) => resolve(rows));
