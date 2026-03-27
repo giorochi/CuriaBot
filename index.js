@@ -1,83 +1,83 @@
 const {
-  Client,
-  GatewayIntentBits,
-  Partials,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  Events
-} = require('discord.js');
+    const members = await guild.members.fetch();
 
-const db = require('./db');
-const econ = require('./economy');
-const cron = require('node-cron');
+    for (const member of members.values()) {
+      let totalSalary = 0;
 
-const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.DirectMessages],
-  partials: [Partials.Channel]
-});
-const http = require('http');
+      member.roles.cache.forEach(role => {
+        if (SALARY_ROLES[role.name]) {
+          totalSalary += SALARY_ROLES[role.name];
+        }
+      });
 
-http.createServer((req, res) => {
-  res.write('Bot attivo');
-  res.end();
-}).listen(process.env.PORT || 3000);
-client.once('ready', () => {
-  console.log(`ONLINE ${client.user.tag}`);
-});
+      if (totalSalary > 0) {
+        const tax = Math.floor(totalSalary * TAX_RATE);
+        const finalAmount = totalSalary - tax;
 
-// STIPENDI AUTOMATICI
-cron.schedule('0 * * * *', () => {
-  db.run("UPDATE players SET money = money + salary");
-});
+        econ.addMoney(member.id, finalAmount);
 
-client.on(Events.InteractionCreate, async interaction => {
-  if (interaction.isChatInputCommand()) {
-    const user = await econ.getUser(interaction.user.id, interaction.user.username);
-
-    if (user.isExcommunicated) {
-      return interaction.reply({ content: 'Sei scomunicato.', ephemeral: true });
-    }
-
-    if (interaction.commandName === 'profilo') {
-      await interaction.user.send(`Denaro: ${user.money}\nRuolo: ${user.role}`);
-      return interaction.reply({ content: 'Controlla DM', ephemeral: true });
-    }
-
-    if (interaction.commandName === 'dona') {
-      if (user.money < 10) return interaction.reply({ content: 'Sei senza soldi.', ephemeral: true });
-      econ.addMoney(user.id, -10);
-      return interaction.reply({ content: 'Donazione fatta', ephemeral: true });
-    }
-
-    if (interaction.commandName === 'indulgenza') {
-      if (user.money < 50) return interaction.reply({ content: 'Non hai abbastanza denaro', ephemeral: true });
-      econ.addMoney(user.id, -50);
-      return interaction.reply({ content: 'Indulgenza ottenuta', ephemeral: true });
-    }
-
-    if (interaction.commandName === 'panel') {
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('profilo_btn').setLabel('Profilo').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId('economia_btn').setLabel('Economia').setStyle(ButtonStyle.Success)
-      );
-
-      return interaction.reply({ content: 'Apri il menu', components: [row], ephemeral: true });
+        try {
+          await member.send(`💰 Stipendio ricevuto\nLordo: ${totalSalary}\nTasse: ${tax}\nNetto: ${finalAmount}`);
+        } catch {}
+      }
     }
   }
 
-  if (interaction.isButton()) {
-    const user = await econ.getUser(interaction.user.id, interaction.user.username);
+  console.log("Stipendi giornalieri completati");
+}
 
-    if (interaction.customId === 'profilo_btn') {
-      interaction.user.send(`Profilo:\nDenaro: ${user.money}\nRuolo: ${user.role}`);
-    }
+// ogni giorno a mezzanotte
+cron.schedule('0 0 * * *', processSalaries);
 
-    if (interaction.customId === 'economia_btn') {
-      interaction.user.send(`Denaro attuale: ${user.money}`);
-    }
+// =========================
+// INTERFACCIA GIOCATORE
+// =========================
+client.on(Events.InteractionCreate, async interaction => {
+  if (!interaction.isButton()) return;
 
-    interaction.reply({ content: 'Controlla i DM', ephemeral: true });
+  const user = await econ.getUser(interaction.user.id, interaction.user.username);
+
+  if (interaction.customId === 'open_panel') {
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('profilo').setLabel('Profilo').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('soldi').setLabel('Denaro').setStyle(ButtonStyle.Success)
+    );
+
+    return interaction.user.send({ content: '📜 Menu giocatore', components: [row] });
+  }
+
+  if (interaction.customId === 'profilo') {
+    return interaction.user.send(`👤 Profilo\nNome: ${user.name}\nDenaro: ${user.money}`);
+  }
+
+  if (interaction.customId === 'soldi') {
+    return interaction.user.send(`💰 Hai ${user.money} monete`);
+  }
+
+  if (interaction.customId === 'admin_panel') {
+    if (!interaction.member.permissions.has('Administrator')) return;
+
+    const users = await new Promise(resolve => {
+      db.all("SELECT * FROM players", [], (err, rows) => resolve(rows));
+    });
+
+    const text = users.map(u => `${u.name}: ${u.money}`).join("\n");
+
+    return interaction.user.send(`📊 Pannello Admin\n${text}`);
+  }
+});
+
+// =========================
+// COMANDO PER APRIRE MENU
+// =========================
+client.on(Events.MessageCreate, async msg => {
+  if (msg.content === '!menu') {
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('open_panel').setLabel('Apri Menu').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('admin_panel').setLabel('Admin').setStyle(ButtonStyle.Danger)
+    );
+
+    msg.reply({ content: 'Apri il pannello 👇', components: [row] });
   }
 });
 
