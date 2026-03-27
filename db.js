@@ -5,11 +5,7 @@ db.serialize(() => {
   db.run(`CREATE TABLE IF NOT EXISTS players (
     id TEXT PRIMARY KEY,
     name TEXT,
-    role TEXT DEFAULT 'Fedele',
-    rank INTEGER DEFAULT 0,
-    money INTEGER DEFAULT 100,
-    salary INTEGER DEFAULT 0,
-    isExcommunicated INTEGER DEFAULT 0
+    money INTEGER DEFAULT 100
   )`);
 });
 
