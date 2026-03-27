@@ -7,12 +7,12 @@ const commands = [
   new SlashCommandBuilder().setName('panel').setDescription('Menu principale')
 ];
 
-const rest = new REST({ version: '10' }).setToken(process.env.CLIENT_ID);
+const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
 async function deploy() {
   try {
     await rest.put(
-      Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID)
+      Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
       { body: commands }
     );
     console.log('Comandi registrati');
