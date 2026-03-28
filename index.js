@@ -200,5 +200,3 @@ client.on(Events.MessageCreate, async msg => {
 
 // LOGIN
 console.log("TOKEN:", process.env.TOKEN ? "OK" : "MANCANTE");
-  .then(() => console.log("LOGIN OK"))
-  .catch(err => console.error("ERRORE LOGIN:", err));
