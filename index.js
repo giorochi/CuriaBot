@@ -1,7 +1,3 @@
-// ==========================================
-// DISCORD CHURCH RP BOT - INDEX.JS COMPLETO
-// ==========================================
-
 const {
   Client,
   GatewayIntentBits,
@@ -12,11 +8,17 @@ const {
   Events
 } = require('discord.js');
 
-const http = require('http'); // Porta finta per Render Web Service
-const db = require('./db');
+const http = require('http');
 const econ = require('./economy');
+const db = require('./db');
 const cron = require('node-cron');
-const { SALARY_ROLES, TAX_RATE } = require('./roleConfig');
+const {
+  SALARY_ROLES,
+  TAX_RATE,
+  BANK_INTEREST,
+  INDULGENCE_COST,
+  PROPERTIES
+} = require('./roleConfig');
 
 const client = new Client({
   intents: [
@@ -29,122 +31,172 @@ const client = new Client({
   partials: [Partials.Channel]
 });
 
-// =========================
-// PORTA FINTA RENDER
-// =========================
-const PORT = process.env.PORT || 10000;
-http.createServer((req, res) => res.end('Bot attivo')).listen(PORT, () => {
-  console.log(`Server HTTP finto attivo su porta ${PORT}`);
-});
+// PORTA FINTA
+http.createServer((req, res) => res.end("OK")).listen(process.env.PORT || 10000);
 
-// =========================
-// BOT ONLINE
-// =========================
+// READY
 client.once(Events.ClientReady, () => {
-  console.log(`ONLINE ${client.user.tag}`);
+  console.log("ONLINE");
 });
 
-// =========================
-// FUNZIONE STIPENDI + TASSE + DM
-// =========================
-async function processSalaries() {
+// ================= CRON GIORNALIERO =================
+async function dailyUpdate() {
   for (const guild of client.guilds.cache.values()) {
     const members = await guild.members.fetch();
 
-    members.forEach(async (member) => {
-      let totalSalary = 0;
-      member.roles.cache.forEach(role => {
-        if (SALARY_ROLES[role.name]) totalSalary += SALARY_ROLES[role.name];
+    for (const member of members.values()) {
+      const user = await econ.getUser(member.id, member.user.username);
+      if (user.excommunicated) continue;
+
+      let salary = 0;
+      member.roles.cache.forEach(r => {
+        if (SALARY_ROLES[r.name]) salary += SALARY_ROLES[r.name];
       });
 
-      if (totalSalary > 0) {
-        const tax = Math.floor(totalSalary * TAX_RATE);
-        const finalAmount = totalSalary - tax;
-        econ.addMoney(member.id, finalAmount);
+      const tax = Math.floor(salary * TAX_RATE);
+      const net = salary - tax;
 
-        try {
-          await member.send(`💰 Stipendio giornaliero ricevuto\nLordo: ${totalSalary}\nTasse: ${tax}\nNetto: ${finalAmount}`);
-        } catch {}
-      }
-    });
+      econ.addMoney(member.id, net);
+      econ.log(member.id, "stipendio", net);
+
+      // INTERESSI BANCA
+      const interest = Math.floor(user.bank * BANK_INTEREST);
+      econ.addBank(member.id, interest);
+
+      // PROPRIETÀ
+      const props = await econ.getProperties(member.id);
+      let income = 0;
+      props.forEach(p => income += PROPERTIES[p.type].income);
+
+      econ.addMoney(member.id, income);
+
+      try {
+        await member.send(`💰 +${net} stipendio\n🏦 +${interest} interessi\n🏛️ +${income} proprietà`);
+      } catch {}
+    }
   }
-  console.log("Stipendi giornalieri completati");
 }
 
-// CRON: ogni giorno a mezzanotte
-cron.schedule('0 0 * * *', () => processSalaries());
+cron.schedule('0 0 * * *', dailyUpdate);
 
-// =========================
-// INTERAZIONI BOTTONI GIOCATORE + ADMIN
-// =========================
-client.on(Events.InteractionCreate, async interaction => {
-  if (!interaction.isButton()) return;
+// ================= SESSIONI =================
+const sessions = new Map();
 
-  // Rispondi subito per evitare timeout
-  await interaction.deferReply({ ephemeral: true });
+// ================= BOTTONI =================
+client.on(Events.InteractionCreate, async i => {
+  if (!i.isButton()) return;
 
-  const user = await econ.getUser(interaction.user.id, interaction.user.username);
+  await i.deferReply({ ephemeral: true });
 
-  // PANNELLO GIOCATORE
-  if (interaction.customId === 'open_panel') {
+  const user = await econ.getUser(i.user.id, i.user.username);
+
+  if (i.customId === "menu") {
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('profilo').setLabel('Profilo').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId('soldi').setLabel('Denaro').setStyle(ButtonStyle.Success)
+      new ButtonBuilder().setCustomId('profilo').setLabel('Profilo').setStyle(1),
+      new ButtonBuilder().setCustomId('trasf').setLabel('Trasferisci').setStyle(3),
+      new ButtonBuilder().setCustomId('banca').setLabel('Banca').setStyle(2),
+      new ButtonBuilder().setCustomId('prop').setLabel('Proprietà').setStyle(2),
+      new ButtonBuilder().setCustomId('ind').setLabel('Indulgenza').setStyle(4)
     );
-    await interaction.user.send({ content: '📜 Menu giocatore', components: [row] });
-    return interaction.editReply('✅ Menu inviato in DM!');
+    await i.user.send({ content: "Menu", components: [row] });
+    return i.editReply("DM inviati");
   }
 
-  if (interaction.customId === 'profilo') {
-    return interaction.editReply(`👤 Profilo\nNome: ${user.name}\nDenaro: ${user.money}`);
+  if (i.customId === "profilo") {
+    const props = await econ.getProperties(i.user.id);
+    return i.editReply(`💰 ${user.money} | 🏦 ${user.bank} | 🏛️ ${props.length}`);
   }
 
-  if (interaction.customId === 'soldi') {
-    return interaction.editReply(`💰 Hai ${user.money} monete`);
+  if (i.customId === "trasf") {
+    sessions.set(i.user.id, { type: "transfer" });
+    return i.editReply("Scrivi: @utente quantità");
   }
 
-  // PANNELLO ADMIN AVANZATO
-  if (interaction.customId === 'admin_panel') {
-    if (!interaction.member.permissions.has('Administrator')) {
-      return interaction.editReply('❌ Non puoi usare questo comando');
+  if (i.customId === "banca") {
+    sessions.set(i.user.id, { type: "bank" });
+    return i.editReply("Scrivi: deposito/prelievo quantità");
+  }
+
+  if (i.customId === "prop") {
+    let txt = "Proprietà disponibili:\n";
+    for (const p in PROPERTIES) {
+      txt += `${p} - ${PROPERTIES[p].price}\n`;
+    }
+    sessions.set(i.user.id, { type: "buy" });
+    return i.editReply(txt);
+  }
+
+  if (i.customId === "ind") {
+    if (user.money < INDULGENCE_COST) return i.editReply("Non hai soldi");
+    econ.addMoney(i.user.id, -INDULGENCE_COST);
+    econ.log(i.user.id, "indulgenza", -INDULGENCE_COST);
+    return i.editReply("Indulgenza acquistata");
+  }
+});
+
+// ================= INPUT =================
+client.on(Events.MessageCreate, async msg => {
+  if (msg.author.bot) return;
+
+  if (msg.content === "!menu") {
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('menu').setLabel('Apri').setStyle(1)
+    );
+    return msg.reply({ components: [row] });
+  }
+
+  if (!sessions.has(msg.author.id)) return;
+
+  const s = sessions.get(msg.author.id);
+  const args = msg.content.split(" ");
+  const user = await econ.getUser(msg.author.id, msg.author.username);
+
+  if (s.type === "transfer") {
+    const target = msg.mentions.users.first();
+    const amount = parseInt(args[1]);
+
+    if (user.money < amount) return msg.reply("Non hai soldi");
+
+    econ.addMoney(user.id, -amount);
+    econ.addMoney(target.id, amount);
+    econ.log(user.id, "transfer", amount, target.id);
+
+    sessions.delete(msg.author.id);
+    return msg.reply("Fatto");
+  }
+
+  if (s.type === "bank") {
+    const amount = parseInt(args[1]);
+
+    if (args[0] === "deposito") {
+      econ.addMoney(user.id, -amount);
+      econ.addBank(user.id, amount);
     }
 
-    const users = await new Promise(resolve => {
-      db.all("SELECT * FROM players", [], (err, rows) => resolve(rows));
-    });
+    if (args[0] === "prelievo") {
+      econ.addMoney(user.id, amount);
+      econ.addBank(user.id, -amount);
+    }
 
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('admin_add').setLabel('Aggiungi soldi').setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId('admin_subtract').setLabel('Rimuovi soldi').setStyle(ButtonStyle.Danger)
-    );
-
-    const text = users.map(u => `${u.name}: ${u.money}`).join('\n');
-    return interaction.user.send({ content: `📊 Pannello Admin\n${text}`, components: [row] });
+    sessions.delete(msg.author.id);
+    return msg.reply("Banca aggiornata");
   }
 
-  // BOTTONI ADMIN AGGIUNGI/SOTTRAI SOLDI
-  if (interaction.customId === 'admin_add') {
-    await interaction.editReply('Funzione aggiungi soldi da implementare con input');
-  }
+  if (s.type === "buy") {
+    const type = args[0];
+    const prop = PROPERTIES[type];
 
-  if (interaction.customId === 'admin_subtract') {
-    await interaction.editReply('Funzione sottrai soldi da implementare con input');
-  }
-});
+    if (!prop) return msg.reply("Non esiste");
 
-// =========================
-// COMANDO !menu
-// =========================
-client.on(Events.MessageCreate, async msg => {
-  if (msg.content === '!menu') {
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('open_panel').setLabel('Apri Menu').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId('admin_panel').setLabel('Admin').setStyle(ButtonStyle.Danger)
-    );
+    if (user.money < prop.price) return msg.reply("Non hai soldi");
 
-    msg.reply({ content: 'Apri il pannello 👇', components: [row] });
+    econ.addMoney(user.id, -prop.price);
+    econ.addProperty(user.id, type);
+
+    sessions.delete(msg.author.id);
+    return msg.reply(`Comprato ${type}`);
   }
 });
 
-// LOGIN BOT
+// LOGIN
 client.login(process.env.TOKEN);
