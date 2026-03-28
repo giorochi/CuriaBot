@@ -7,7 +7,7 @@ const {
   ButtonStyle,
   Events
 } = require('discord.js');
-
+console.log("AVVIO FILE");
 const http = require('http');
 const econ = require('./economy');
 const db = require('./db');
@@ -199,4 +199,6 @@ client.on(Events.MessageCreate, async msg => {
 });
 
 // LOGIN
-client.login(process.env.TOKEN);
+console.log("TOKEN:", process.env.TOKEN ? "OK" : "MANCANTE");
+  .then(() => console.log("LOGIN OK"))
+  .catch(err => console.error("ERRORE LOGIN:", err));
