@@ -100,8 +100,12 @@ client.on(Events.InteractionCreate, async i => {
         new ButtonBuilder().setCustomId('ind').setLabel('Indulgenza').setStyle(ButtonStyle.Danger)
       );
 
-      await i.user.send({ content: "📜 Menu", components: [row] });
-      return i.editReply("✅ Menu inviato nei DM");
+      try {
+  await i.user.send({ content: "📜 Menu", components: [row] });
+  return i.editReply("✅ Menu inviato nei DM");
+} catch {
+  return i.editReply("❌ Non riesco a scriverti in DM. Attivali!");
+}
     }
 
     if (i.customId === "profilo") {
